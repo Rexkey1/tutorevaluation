@@ -8,6 +8,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me";
 
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
+  console.log("Login attempt:", email, password);
   // email could be an actual email or an index number (student_id)
   const user = db.prepare(`
     SELECT u.* FROM users u 
@@ -15,11 +16,14 @@ router.post("/login", (req, res) => {
     WHERE LOWER(u.email) = LOWER(?) OR LOWER(s.student_id) = LOWER(?)
   `).get(email, email) as any;
 
+  console.log("User found:", user ? user.email : "none");
+
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
   const isValid = bcrypt.compareSync(password, user.password);
+  console.log("Password valid:", isValid);
   if (!isValid) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
