@@ -46,14 +46,36 @@ router.put("/:id", (req, res) => {
 });
 
 router.delete("/:id", (req, res) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id, 10);
   try {
     const tutor = db.prepare("SELECT user_id FROM tutors WHERE id = ?").get(id) as any;
     if (!tutor) return res.status(404).json({ error: "Tutor not found" });
 
     db.transaction(() => {
+      // Find all assignments for this tutor
+      const assignments = db.prepare("SELECT id FROM tutor_assignments WHERE tutor_id = ?").all(id) as any[];
+      
+      for (const assignment of assignments) {
+        // Find all evaluations for this assignment
+        const evaluations = db.prepare("SELECT id FROM evaluations WHERE tutor_assignment_id = ?").all(assignment.id) as any[];
+        
+        for (const ev of evaluations) {
+          // Delete answers for these evaluations
+          db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+        }
+        
+        // Delete evaluations
+        db.prepare("DELETE FROM evaluations WHERE tutor_assignment_id = ?").run(assignment.id);
+      }
+      
+      // Delete assignments
+      db.prepare("DELETE FROM tutor_assignments WHERE tutor_id = ?").run(id);
+
+      // Delete tutor and user records
       db.prepare("DELETE FROM tutors WHERE id = ?").run(id);
-      db.prepare("DELETE FROM users WHERE id = ?").run(tutor.user_id);
+      if (tutor.user_id) {
+        db.prepare("DELETE FROM users WHERE id = ?").run(tutor.user_id);
+      }
     })();
     res.json({ success: true });
   } catch (err: any) {

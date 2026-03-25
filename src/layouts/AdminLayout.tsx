@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Users, BookOpen, GraduationCap, Calendar, ClipboardList, LogOut, HelpCircle, UserPlus, Menu, X, BarChart2 } from "lucide-react";
+import { LayoutDashboard, Users, BookOpen, GraduationCap, Calendar, ClipboardList, LogOut, HelpCircle, UserPlus, Menu, X, BarChart2, Shield, UserCircle } from "lucide-react";
 
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [userRole, setUserRole] = useState("");
+  
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setUserRole(user.role);
+      } catch (e) {}
+    }
+  }, []);
   
   const navItems = [
     { path: "/admin", icon: LayoutDashboard, label: "Dashboard" },
@@ -19,6 +30,10 @@ export default function AdminLayout() {
     { path: "/admin/periods", icon: Calendar, label: "Evaluation Periods" },
     { path: "/admin/questions", icon: HelpCircle, label: "Questions" },
   ];
+
+  if (userRole === "super_admin") {
+    navItems.push({ path: "/admin/users", icon: Shield, label: "System Users" });
+  }
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -41,7 +56,7 @@ export default function AdminLayout() {
         <div className="p-6 hidden md:block">
           <h1 className="text-xl font-bold text-white">TutorEval</h1>
         </div>
-        <nav className="flex-1 px-4 space-y-2 mt-4 md:mt-0">
+        <nav className="flex-1 px-4 space-y-2 mt-4 md:mt-0 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -60,7 +75,17 @@ export default function AdminLayout() {
             );
           })}
         </nav>
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-800 space-y-2">
+          <Link 
+            to="/admin/profile"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={`flex items-center space-x-3 px-4 py-3 w-full rounded-lg transition-colors text-left ${
+              location.pathname === "/admin/profile" ? "bg-indigo-600 text-white" : "hover:bg-slate-800 hover:text-white"
+            }`}
+          >
+            <UserCircle className="w-5 h-5" />
+            <span className="font-medium">My Profile</span>
+          </Link>
           <button 
             onClick={handleLogout}
             className="flex items-center space-x-3 px-4 py-3 w-full rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-left"
@@ -75,7 +100,7 @@ export default function AdminLayout() {
       <main className="flex-1 flex flex-col overflow-hidden w-full">
         <header className="h-16 bg-white border-b border-slate-200 hidden md:flex items-center px-8">
           <h2 className="text-xl font-semibold text-slate-800">
-            {navItems.find(i => i.path === location.pathname)?.label || "Admin Panel"}
+            {navItems.find(i => i.path === location.pathname)?.label || (location.pathname === "/admin/profile" ? "My Profile" : "Admin Panel")}
           </h2>
         </header>
         <div className="flex-1 overflow-auto p-4 md:p-8">

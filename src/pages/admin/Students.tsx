@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Upload, Edit, Trash2 } from "lucide-react";
+import ConfirmModal from "../../components/ConfirmModal";
 
 export default function Students() {
   const [students, setStudents] = useState([]);
@@ -9,6 +10,9 @@ export default function Students() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [formData, setFormData] = useState({ id: null, name: "", index_number: "", program_id: "", class_id: "" });
   const [uploadError, setUploadError] = useState("");
+
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchData = () => {
     fetch("/api/students").then(res => res.json()).then(setStudents);
@@ -20,20 +24,26 @@ export default function Students() {
     fetchData();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     const isEdit = formData.id !== null;
     const url = isEdit ? `/api/students/${formData.id}` : "/api/students";
     const method = isEdit ? "PUT" : "POST";
 
-    await fetch(url, {
+    const res = await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData)
     });
-    setShowModal(false);
-    setFormData({ id: null, name: "", index_number: "", program_id: "", class_id: "" });
-    fetchData();
+    
+    if (res.ok) {
+      setShowModal(false);
+      setFormData({ id: null, name: "", index_number: "", program_id: "", class_id: "" });
+      fetchData();
+    } else {
+      const data = await res.json();
+      setErrorMsg(data.error || "An error occurred");
+    }
   };
 
   const handleEdit = (student: any) => {
@@ -47,13 +57,23 @@ export default function Students() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this student?")) return;
-    await fetch(`/api/students/${id}`, { method: "DELETE" });
-    fetchData();
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      const res = await fetch(`/api/students/${deleteId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchData();
+        setDeleteId(null);
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.error || "Failed to delete student");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: any) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -144,7 +164,7 @@ export default function Students() {
                     <button onClick={() => handleEdit(student)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(student.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
+                    <button onClick={() => setDeleteId(student.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
@@ -159,6 +179,26 @@ export default function Students() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={deleteId !== null}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this student? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
+
+      {errorMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+            <p className="text-slate-600 mb-6">{errorMsg}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setErrorMsg(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

@@ -11,6 +11,7 @@ export default function Evaluate() {
   // Form state
   const [ratings, setRatings] = useState<Record<string, any>>({});
   const [isAnonymous, setIsAnonymous] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -30,7 +31,7 @@ export default function Evaluate() {
       .then(setQuestions);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     
     const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -62,7 +63,7 @@ export default function Evaluate() {
       
       setIsSubmitted(true);
     } catch (err: any) {
-      alert(err.message || "Failed to submit evaluation. You may have already evaluated this tutor.");
+      setErrorMsg(err.message || "Failed to submit evaluation. You may have already evaluated this tutor.");
     }
   };
 
@@ -133,6 +134,18 @@ export default function Evaluate() {
             </div>
           )}
         </div>
+
+        {errorMsg && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+              <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+              <p className="text-slate-600 mb-6">{errorMsg}</p>
+              <div className="flex justify-end">
+                <button onClick={() => setErrorMsg(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -251,6 +264,18 @@ export default function Evaluate() {
           </button>
         </div>
       </form>
+
+      {errorMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+            <p className="text-slate-600 mb-6">{errorMsg}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setErrorMsg(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import dashboardRoutes from "./dashboard.js";
 import questionRoutes from "./questions.js";
 import studentRoutes from "./students.js";
 import analyticsRoutes from "./analytics.js";
+import userRoutes from "./users.js";
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use("/dashboard", dashboardRoutes);
 router.use("/questions", questionRoutes);
 router.use("/students", studentRoutes);
 router.use("/analytics", analyticsRoutes);
+router.use("/users", userRoutes);
 
 export default router;

@@ -16,6 +16,8 @@ import Periods from "./pages/admin/Periods";
 import Questions from "./pages/admin/Questions";
 import Students from "./pages/admin/Students";
 import Analytics from "./pages/admin/Analytics";
+import SystemUsers from "./pages/admin/SystemUsers";
+import Profile from "./pages/admin/Profile";
 import StudentLayout from "./layouts/StudentLayout";
 import Evaluate from "./pages/student/Evaluate";
 
@@ -37,6 +39,8 @@ export default function App() {
           <Route path="assignments" element={<Assignments />} />
           <Route path="periods" element={<Periods />} />
           <Route path="questions" element={<Questions />} />
+          <Route path="users" element={<SystemUsers />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
 
         <Route path="/student" element={<StudentLayout />}>

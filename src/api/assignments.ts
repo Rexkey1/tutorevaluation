@@ -33,4 +33,43 @@ router.post("/", (req, res) => {
   }
 });
 
+router.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { tutor_id, course_id, class_id, program_id, academic_year, semester } = req.body;
+  try {
+    db.prepare(`
+      UPDATE tutor_assignments 
+      SET tutor_id = ?, course_id = ?, class_id = ?, program_id = ?, academic_year = ?, semester = ?
+      WHERE id = ?
+    `).run(tutor_id, course_id, class_id, program_id, academic_year, semester, id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      // Find all evaluations for this assignment
+      const evaluations = db.prepare("SELECT id FROM evaluations WHERE tutor_assignment_id = ?").all(id) as any[];
+      
+      for (const ev of evaluations) {
+        // Delete answers for these evaluations
+        db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+      }
+      
+      // Delete evaluations
+      db.prepare("DELETE FROM evaluations WHERE tutor_assignment_id = ?").run(id);
+      
+      // Delete assignment
+      db.prepare("DELETE FROM tutor_assignments WHERE id = ?").run(id);
+    })();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 export default router;

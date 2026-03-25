@@ -6,6 +6,9 @@ export default function Tutors() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ id: null, name: "", email: "", staff_id: "", department: "", specialization: "" });
 
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const fetchTutors = () => {
     fetch("/api/tutors").then(res => res.json()).then(setTutors);
   };
@@ -14,7 +17,7 @@ export default function Tutors() {
     fetchTutors();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     const isEdit = formData.id !== null;
     const url = isEdit ? `/api/tutors/${formData.id}` : "/api/tutors";
@@ -42,10 +45,20 @@ export default function Tutors() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this tutor?")) return;
-    await fetch(`/api/tutors/${id}`, { method: "DELETE" });
-    fetchTutors();
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      const res = await fetch(`/api/tutors/${deleteId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchTutors();
+        setDeleteId(null);
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.error || "Failed to delete tutor");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
   };
 
   return (
@@ -93,7 +106,7 @@ export default function Tutors() {
                     <button onClick={() => handleEdit(tutor)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleDelete(tutor.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
+                    <button onClick={() => setDeleteId(tutor.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
@@ -108,6 +121,31 @@ export default function Tutors() {
           </table>
         </div>
       </div>
+
+      {deleteId !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">Confirm Delete</h3>
+            <p className="text-slate-600 mb-6">Are you sure you want to delete this tutor? This action cannot be undone.</p>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setDeleteId(null)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button onClick={confirmDelete} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+            <p className="text-slate-600 mb-6">{errorMsg}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setErrorMsg(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

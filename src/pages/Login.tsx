@@ -8,7 +8,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: any) => {
     e.preventDefault();
     try {
       const res = await fetch("/api/auth/login", {
@@ -53,7 +53,7 @@ export default function Login() {
               type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. student@example.com or ccnwbphn250000"
+              placeholder="Email or Index Number"
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               required
             />
@@ -75,11 +75,6 @@ export default function Login() {
             Sign In
           </button>
         </form>
-        
-        <div className="mt-6 text-center text-sm text-slate-500 space-y-1">
-          <p>Admin: admin@example.com / admin123</p>
-          <p>Student: student@example.com (or STU001) / student123</p>
-        </div>
       </div>
     </div>
   );

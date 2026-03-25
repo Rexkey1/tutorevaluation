@@ -56,6 +56,15 @@ router.delete("/:id", (req, res) => {
     if (!student) return res.status(404).json({ error: "Student not found" });
 
     db.transaction(() => {
+      // Delete evaluation answers for this student
+      const evaluations = db.prepare("SELECT id FROM evaluations WHERE student_id = ?").all(id) as any[];
+      for (const ev of evaluations) {
+        db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+      }
+      // Delete evaluations for this student
+      db.prepare("DELETE FROM evaluations WHERE student_id = ?").run(id);
+      
+      // Delete student and user records
       db.prepare("DELETE FROM students WHERE id = ?").run(id);
       db.prepare("DELETE FROM users WHERE id = ?").run(student.user_id);
     })();

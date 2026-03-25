@@ -48,4 +48,18 @@ router.get("/results", (req, res) => {
   }
 });
 
+router.delete("/results", (req, res) => {
+  try {
+    db.transaction(() => {
+      // Delete all evaluation answers
+      db.prepare("DELETE FROM evaluation_answers").run();
+      // Delete all evaluations
+      db.prepare("DELETE FROM evaluations").run();
+    })();
+    res.json({ success: true, message: "All analytics and results have been cleared successfully." });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

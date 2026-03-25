@@ -22,4 +22,30 @@ router.post("/", (req, res) => {
   }
 });
 
+router.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, code, program_id, semester, level } = req.body;
+  try {
+    db.prepare("UPDATE courses SET name = ?, code = ?, program_id = ?, semester = ?, level = ? WHERE id = ?").run(name, code, program_id, semester, level, id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      // Set course_id to null in tutor_assignments
+      db.prepare("UPDATE tutor_assignments SET course_id = NULL WHERE course_id = ?").run(id);
+      
+      db.prepare("DELETE FROM courses WHERE id = ?").run(id);
+    })();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 export default router;

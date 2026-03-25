@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Edit, Trash2 } from "lucide-react";
+import ConfirmModal from "../../components/ConfirmModal";
 
 export default function Assignments() {
   const [assignments, setAssignments] = useState([]);
@@ -8,7 +9,10 @@ export default function Assignments() {
   const [classes, setClasses] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({ tutor_id: "", course_id: "", class_id: "", program_id: "", academic_year: "", semester: "" });
+  const [formData, setFormData] = useState({ id: null, tutor_id: "", course_id: "", class_id: "", program_id: "", academic_year: "", semester: "" });
+
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fetchData = () => {
     fetch("/api/assignments").then(res => res.json()).then(setAssignments);
@@ -22,16 +26,55 @@ export default function Assignments() {
     fetchData();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
-    await fetch("/api/assignments", {
-      method: "POST",
+    const isEdit = formData.id !== null;
+    const url = isEdit ? `/api/assignments/${formData.id}` : "/api/assignments";
+    const method = isEdit ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData)
     });
-    setShowModal(false);
-    setFormData({ tutor_id: "", course_id: "", class_id: "", program_id: "", academic_year: "", semester: "" });
-    fetchData();
+
+    if (res.ok) {
+      setShowModal(false);
+      setFormData({ id: null, tutor_id: "", course_id: "", class_id: "", program_id: "", academic_year: "", semester: "" });
+      fetchData();
+    } else {
+      const data = await res.json();
+      setErrorMsg(data.error || "An error occurred");
+    }
+  };
+
+  const handleEdit = (assignment: any) => {
+    setFormData({ 
+      id: assignment.id, 
+      tutor_id: assignment.tutor_id || "", 
+      course_id: assignment.course_id || "", 
+      class_id: assignment.class_id || "", 
+      program_id: assignment.program_id || "", 
+      academic_year: assignment.academic_year || "", 
+      semester: assignment.semester || "" 
+    });
+    setShowModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    try {
+      const res = await fetch(`/api/assignments/${deleteId}`, { method: "DELETE" });
+      if (res.ok) {
+        fetchData();
+        setDeleteId(null);
+      } else {
+        const data = await res.json();
+        setErrorMsg(data.error || "Failed to delete assignment");
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
   };
 
   return (
@@ -39,7 +82,10 @@ export default function Assignments() {
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold text-slate-800">Tutor Assignments</h2>
         <button 
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            setFormData({ id: null, tutor_id: "", course_id: "", class_id: "", program_id: "", academic_year: "", semester: "" });
+            setShowModal(true);
+          }}
           className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-indigo-700"
         >
           <Plus className="w-4 h-4" />
@@ -58,6 +104,7 @@ export default function Assignments() {
                 <th className="p-4">Program</th>
                 <th className="p-4">Academic Year</th>
                 <th className="p-4">Semester</th>
+                <th className="p-4">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -69,11 +116,19 @@ export default function Assignments() {
                   <td className="p-4 text-slate-600">{assignment.program_name}</td>
                   <td className="p-4 text-slate-600">{assignment.academic_year}</td>
                   <td className="p-4 text-slate-600">{assignment.semester}</td>
+                  <td className="p-4 flex space-x-2">
+                    <button onClick={() => handleEdit(assignment)} className="p-1 text-indigo-600 hover:bg-indigo-50 rounded">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => setDeleteId(assignment.id)} className="p-1 text-red-600 hover:bg-red-50 rounded">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {assignments.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">No assignments found.</td>
+                  <td colSpan={7} className="p-8 text-center text-slate-500">No assignments found.</td>
                 </tr>
               )}
             </tbody>
@@ -81,10 +136,30 @@ export default function Assignments() {
         </div>
       </div>
 
+      <ConfirmModal
+        isOpen={deleteId !== null}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this assignment? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
+
+      {errorMsg && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold text-red-600 mb-2">Error</h3>
+            <p className="text-slate-600 mb-6">{errorMsg}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setErrorMsg(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-lg font-semibold mb-4">New Assignment</h3>
+            <h3 className="text-lg font-semibold mb-4">{formData.id ? "Edit Assignment" : "New Assignment"}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tutor</label>

@@ -1,15 +1,45 @@
 import { useState, useEffect } from "react";
-import { Download, Search } from "lucide-react";
+import { Download, Search, Trash2 } from "lucide-react";
 
 export default function Analytics() {
   const [results, setResults] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isClearing, setIsClearing] = useState(false);
 
-  useEffect(() => {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [message, setMessage] = useState<{type: string, text: string} | null>(null);
+
+  const fetchResults = () => {
     fetch("/api/analytics/results")
       .then(res => res.json())
       .then(setResults);
+  };
+
+  useEffect(() => {
+    fetchResults();
   }, []);
+
+  const handleClearResults = async () => {
+    setIsClearing(true);
+    try {
+      const res = await fetch("/api/analytics/results", {
+        method: "DELETE"
+      });
+      
+      if (res.ok) {
+        setMessage({ type: "success", text: "All results have been cleared successfully." });
+        fetchResults();
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error || "Failed to clear results" });
+      }
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setIsClearing(false);
+      setShowConfirm(false);
+    }
+  };
 
   const handleExport = () => {
     if (results.length === 0) return;
@@ -95,8 +125,43 @@ export default function Analytics() {
             <Download className="w-4 h-4" />
             <span>Export CSV</span>
           </button>
+          <button 
+            onClick={() => setShowConfirm(true)}
+            disabled={results.length === 0 || isClearing}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-red-700 disabled:opacity-50 w-full sm:w-auto"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>{isClearing ? "Clearing..." : "Clear Results"}</span>
+          </button>
         </div>
       </div>
+
+      {showConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">Confirm Clear</h3>
+            <p className="text-slate-600 mb-6">Are you sure you want to delete ALL analytics and results? This action cannot be undone.</p>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setShowConfirm(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg">Cancel</button>
+              <button onClick={handleClearResults} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Clear All</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {message && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className={`text-lg font-semibold mb-2 ${message.type === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
+              {message.type === 'error' ? 'Error' : 'Success'}
+            </h3>
+            <p className="text-slate-600 mb-6">{message.text}</p>
+            <div className="flex justify-end">
+              <button onClick={() => setMessage(null)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">

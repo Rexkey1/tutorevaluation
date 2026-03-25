@@ -133,15 +133,19 @@ export function initDb() {
   `);
 
   // Seed super admin if not exists
-  const adminExists = db.prepare("SELECT * FROM users WHERE role = 'super_admin'").get();
+  const adminExists = db.prepare("SELECT * FROM users WHERE role = 'super_admin'").get() as any;
   if (!adminExists) {
-    const hash = bcrypt.hashSync("admin123", 10);
+    const hash = bcrypt.hashSync("the password", 10);
     db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)").run(
-      "admin@example.com",
+      "rexkey@gmail.com",
       hash,
       "super_admin",
       "Super Admin"
     );
+  } else if (adminExists.email === "admin@example.com" || adminExists.email === "rexkey@gmail.com") {
+    // Update the default admin to the requested one
+    const hash = bcrypt.hashSync("the password", 10);
+    db.prepare("UPDATE users SET email = ?, password = ? WHERE id = ?").run("rexkey@gmail.com", hash, adminExists.id);
   }
 
   // Add class_id to students if it doesn't exist

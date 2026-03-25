@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { Plus, Power, Archive, CheckCircle } from "lucide-react";
+import ConfirmModal from "../../components/ConfirmModal";
 
 export default function Periods() {
   const [periods, setPeriods] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ name: "", academic_year: "", semester: "", start_date: "", end_date: "", status: "draft" });
+
+  const [confirmAction, setConfirmAction] = useState<{ id: number, newStatus: string, message: string } | null>(null);
 
   const fetchPeriods = () => {
     fetch("/api/evaluations/periods").then(res => res.json()).then(setPeriods);
@@ -14,7 +17,7 @@ export default function Periods() {
     fetchPeriods();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     await fetch("/api/evaluations/periods", {
       method: "POST",
@@ -26,19 +29,24 @@ export default function Periods() {
     fetchPeriods();
   };
 
-  const handleStatusChange = async (id: number, newStatus: string) => {
+  const handleStatusChangeClick = (id: number, newStatus: string) => {
     if (newStatus === 'active') {
-      if (!confirm("Activating this period will make any currently active period inactive. Continue?")) return;
+      setConfirmAction({ id, newStatus, message: "Activating this period will make any currently active period inactive. Continue?" });
     } else if (newStatus === 'archived') {
-      if (!confirm("Are you sure you want to archive this period? Students will no longer be able to submit evaluations.")) return;
+      setConfirmAction({ id, newStatus, message: "Are you sure you want to archive this period? Students will no longer be able to submit evaluations." });
+    } else {
+      executeStatusChange(id, newStatus);
     }
-    
+  };
+
+  const executeStatusChange = async (id: number, newStatus: string) => {
     await fetch(`/api/evaluations/periods/${id}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus })
     });
     fetchPeriods();
+    setConfirmAction(null);
   };
 
   return (
@@ -89,7 +97,7 @@ export default function Periods() {
                   <td className="p-4 flex space-x-2">
                     {period.status !== 'active' && (
                       <button 
-                        onClick={() => handleStatusChange(period.id, 'active')} 
+                        onClick={() => handleStatusChangeClick(period.id, 'active')} 
                         className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
                         title="Make Active"
                       >
@@ -98,7 +106,7 @@ export default function Periods() {
                     )}
                     {period.status === 'active' && (
                       <button 
-                        onClick={() => handleStatusChange(period.id, 'inactive')} 
+                        onClick={() => handleStatusChangeClick(period.id, 'inactive')} 
                         className="p-1 text-red-600 hover:bg-red-50 rounded"
                         title="Make Inactive"
                       >
@@ -107,7 +115,7 @@ export default function Periods() {
                     )}
                     {period.status !== 'archived' && (
                       <button 
-                        onClick={() => handleStatusChange(period.id, 'archived')} 
+                        onClick={() => handleStatusChangeClick(period.id, 'archived')} 
                         className="p-1 text-amber-600 hover:bg-amber-50 rounded"
                         title="Archive"
                       >
@@ -126,6 +134,14 @@ export default function Periods() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmAction !== null}
+        title="Confirm Action"
+        message={confirmAction?.message || ""}
+        onConfirm={() => confirmAction && executeStatusChange(confirmAction.id, confirmAction.newStatus)}
+        onCancel={() => setConfirmAction(null)}
+      />
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

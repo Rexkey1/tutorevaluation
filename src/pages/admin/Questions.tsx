@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { Plus, Edit, Trash } from "lucide-react";
+import ConfirmModal from "../../components/ConfirmModal";
 
 export default function Questions() {
   const [questions, setQuestions] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ section: "General", question_text: "", question_type: "rating", is_required: true, order_index: 0 });
+
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const fetchQuestions = () => {
     fetch("/api/questions").then(res => res.json()).then(setQuestions);
@@ -15,7 +18,7 @@ export default function Questions() {
     fetchQuestions();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     const url = editingId ? `/api/questions/${editingId}` : "/api/questions";
     const method = editingId ? "PUT" : "POST";
@@ -44,10 +47,11 @@ export default function Questions() {
     setShowModal(true);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this question?")) return;
-    await fetch(`/api/questions/${id}`, { method: "DELETE" });
+  const confirmDelete = async () => {
+    if (deleteId === null) return;
+    await fetch(`/api/questions/${deleteId}`, { method: "DELETE" });
     fetchQuestions();
+    setDeleteId(null);
   };
 
   return (
@@ -90,7 +94,7 @@ export default function Questions() {
                   <td className="p-4 text-slate-600">{q.is_required ? "Yes" : "No"}</td>
                   <td className="p-4 flex space-x-2">
                     <button onClick={() => handleEdit(q)} className="p-1 text-blue-600 hover:bg-blue-50 rounded"><Edit className="w-4 h-4" /></button>
-                    <button onClick={() => handleDelete(q.id)} className="p-1 text-red-600 hover:bg-red-50 rounded"><Trash className="w-4 h-4" /></button>
+                    <button onClick={() => setDeleteId(q.id)} className="p-1 text-red-600 hover:bg-red-50 rounded"><Trash className="w-4 h-4" /></button>
                   </td>
                 </tr>
               ))}
@@ -103,6 +107,14 @@ export default function Questions() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={deleteId !== null}
+        title="Confirm Delete"
+        message="Are you sure you want to delete this question? This action cannot be undone."
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteId(null)}
+      />
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
