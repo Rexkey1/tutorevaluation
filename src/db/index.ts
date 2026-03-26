@@ -1,4 +1,4 @@
-import Database from "libsql";
+import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";

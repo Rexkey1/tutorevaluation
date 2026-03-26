@@ -4,7 +4,7 @@ import path2 from "path";
 import { fileURLToPath as fileURLToPath2 } from "url";
 
 // src/db/index.ts
-import Database from "libsql";
+import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
 import bcrypt from "bcryptjs";
