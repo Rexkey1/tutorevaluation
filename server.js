@@ -38,7 +38,9 @@ function initDb() {
       user_id INTEGER UNIQUE,
       student_id TEXT UNIQUE,
       program_id INTEGER,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      class_id INTEGER,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (class_id) REFERENCES classes(id)
     );
 
     CREATE TABLE IF NOT EXISTS programs (
@@ -131,15 +133,32 @@ function initDb() {
       FOREIGN KEY (question_id) REFERENCES evaluation_questions(id)
     );
   `);
-  const adminExists = db.prepare("SELECT * FROM users WHERE role = 'super_admin'").get();
+  const adminExists = db.prepare("SELECT * FROM users WHERE role = 'super_admin' AND email = 'rexkey@gmail.com'").get();
   if (!adminExists) {
+    const hash = bcrypt.hashSync("the password", 10);
+    db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)").run(
+      "rexkey@gmail.com",
+      hash,
+      "super_admin",
+      "Super Admin"
+    );
+  } else {
+    const hash = bcrypt.hashSync("the password", 10);
+    db.prepare("UPDATE users SET password = ? WHERE email = 'rexkey@gmail.com'").run(hash);
+  }
+  const oldAdminExists = db.prepare("SELECT * FROM users WHERE email = 'admin@example.com'").get();
+  if (!oldAdminExists) {
     const hash = bcrypt.hashSync("admin123", 10);
     db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)").run(
       "admin@example.com",
       hash,
       "super_admin",
-      "Super Admin"
+      "Admin"
     );
+  }
+  try {
+    db.prepare("ALTER TABLE students ADD COLUMN class_id INTEGER REFERENCES classes(id)").run();
+  } catch (e) {
   }
   const studentExists = db.prepare("SELECT * FROM users WHERE role = 'student'").get();
   if (!studentExists) {
@@ -177,7 +196,7 @@ function initDb() {
 }
 
 // src/api/index.ts
-import { Router as Router12 } from "express";
+import { Router as Router13 } from "express";
 
 // src/api/auth.ts
 import { Router } from "express";
@@ -187,15 +206,18 @@ var router = Router();
 var JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-me";
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
+  console.log("Login attempt:", email, password);
   const user = db.prepare(`
     SELECT u.* FROM users u 
     LEFT JOIN students s ON u.id = s.user_id 
     WHERE LOWER(u.email) = LOWER(?) OR LOWER(s.student_id) = LOWER(?)
   `).get(email, email);
+  console.log("User found:", user ? user.email : "none");
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
   const isValid = bcrypt2.compareSync(password, user.password);
+  console.log("Password valid:", isValid);
   if (!isValid) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
@@ -241,6 +263,46 @@ router2.post("/", (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+router2.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, email, staff_id, department, specialization } = req.body;
+  try {
+    const tutor = db.prepare("SELECT user_id FROM tutors WHERE id = ?").get(id);
+    if (!tutor) return res.status(404).json({ error: "Tutor not found" });
+    db.transaction(() => {
+      db.prepare("UPDATE users SET name = ?, email = ? WHERE id = ?").run(name, email, tutor.user_id);
+      db.prepare("UPDATE tutors SET staff_id = ?, department = ?, specialization = ? WHERE id = ?").run(staff_id, department, specialization, id);
+    })();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router2.delete("/:id", (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  try {
+    const tutor = db.prepare("SELECT user_id FROM tutors WHERE id = ?").get(id);
+    if (!tutor) return res.status(404).json({ error: "Tutor not found" });
+    db.transaction(() => {
+      const assignments = db.prepare("SELECT id FROM tutor_assignments WHERE tutor_id = ?").all(id);
+      for (const assignment of assignments) {
+        const evaluations = db.prepare("SELECT id FROM evaluations WHERE tutor_assignment_id = ?").all(assignment.id);
+        for (const ev of evaluations) {
+          db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+        }
+        db.prepare("DELETE FROM evaluations WHERE tutor_assignment_id = ?").run(assignment.id);
+      }
+      db.prepare("DELETE FROM tutor_assignments WHERE tutor_id = ?").run(id);
+      db.prepare("DELETE FROM tutors WHERE id = ?").run(id);
+      if (tutor.user_id) {
+        db.prepare("DELETE FROM users WHERE id = ?").run(tutor.user_id);
+      }
+    })();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 var tutors_default = router2;
 
 // src/api/programs.ts
@@ -254,6 +316,31 @@ router3.post("/", (req, res) => {
   const { name, code } = req.body;
   try {
     db.prepare("INSERT INTO programs (name, code) VALUES (?, ?)").run(name, code);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router3.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, code } = req.body;
+  try {
+    db.prepare("UPDATE programs SET name = ?, code = ? WHERE id = ?").run(name, code, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router3.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      db.prepare("UPDATE students SET program_id = NULL WHERE program_id = ?").run(id);
+      db.prepare("UPDATE classes SET program_id = NULL WHERE program_id = ?").run(id);
+      db.prepare("UPDATE courses SET program_id = NULL WHERE program_id = ?").run(id);
+      db.prepare("UPDATE tutor_assignments SET program_id = NULL WHERE program_id = ?").run(id);
+      db.prepare("DELETE FROM programs WHERE id = ?").run(id);
+    })();
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -281,6 +368,29 @@ router4.post("/", (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+router4.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, program_id } = req.body;
+  try {
+    db.prepare("UPDATE classes SET name = ?, program_id = ? WHERE id = ?").run(name, program_id, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router4.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      db.prepare("UPDATE students SET class_id = NULL WHERE class_id = ?").run(id);
+      db.prepare("UPDATE tutor_assignments SET class_id = NULL WHERE class_id = ?").run(id);
+      db.prepare("DELETE FROM classes WHERE id = ?").run(id);
+    })();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 var classes_default = router4;
 
 // src/api/courses.ts
@@ -298,6 +408,28 @@ router5.post("/", (req, res) => {
   const { name, code, program_id, semester, level } = req.body;
   try {
     db.prepare("INSERT INTO courses (name, code, program_id, semester, level) VALUES (?, ?, ?, ?, ?)").run(name, code, program_id, semester, level);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router5.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, code, program_id, semester, level } = req.body;
+  try {
+    db.prepare("UPDATE courses SET name = ?, code = ?, program_id = ?, semester = ?, level = ? WHERE id = ?").run(name, code, program_id, semester, level, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router5.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      db.prepare("UPDATE tutor_assignments SET course_id = NULL WHERE course_id = ?").run(id);
+      db.prepare("DELETE FROM courses WHERE id = ?").run(id);
+    })();
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -331,6 +463,36 @@ router6.post("/", (req, res) => {
       INSERT INTO tutor_assignments (tutor_id, course_id, class_id, program_id, academic_year, semester) 
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(tutor_id, course_id, class_id, program_id, academic_year, semester);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router6.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { tutor_id, course_id, class_id, program_id, academic_year, semester } = req.body;
+  try {
+    db.prepare(`
+      UPDATE tutor_assignments 
+      SET tutor_id = ?, course_id = ?, class_id = ?, program_id = ?, academic_year = ?, semester = ?
+      WHERE id = ?
+    `).run(tutor_id, course_id, class_id, program_id, academic_year, semester, id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router6.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    db.transaction(() => {
+      const evaluations = db.prepare("SELECT id FROM evaluations WHERE tutor_assignment_id = ?").all(id);
+      for (const ev of evaluations) {
+        db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+      }
+      db.prepare("DELETE FROM evaluations WHERE tutor_assignment_id = ?").run(id);
+      db.prepare("DELETE FROM tutor_assignments WHERE id = ?").run(id);
+    })();
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -513,22 +675,57 @@ import bcrypt4 from "bcryptjs";
 var router10 = Router10();
 router10.get("/", (req, res) => {
   const students = db.prepare(`
-    SELECT s.*, u.name, u.email, p.name as program_name 
+    SELECT s.*, u.name, u.email, p.name as program_name, c.name as class_name
     FROM students s 
     JOIN users u ON s.user_id = u.id
     LEFT JOIN programs p ON s.program_id = p.id
+    LEFT JOIN classes c ON s.class_id = c.id
   `).all();
   res.json(students);
 });
 router10.post("/", (req, res) => {
-  const { name, index_number, program_id } = req.body;
+  const { name, index_number, program_id, class_id } = req.body;
   try {
     const password = index_number.slice(-6);
     const hash = bcrypt4.hashSync(password, 10);
     const email = `${index_number}@student.local`;
     const result = db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)").run(email, hash, "student", name);
     const userId = result.lastInsertRowid;
-    db.prepare("INSERT INTO students (user_id, student_id, program_id) VALUES (?, ?, ?)").run(userId, index_number, program_id);
+    db.prepare("INSERT INTO students (user_id, student_id, program_id, class_id) VALUES (?, ?, ?, ?)").run(userId, index_number, program_id || null, class_id || null);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router10.put("/:id", (req, res) => {
+  const { id } = req.params;
+  const { name, index_number, program_id, class_id } = req.body;
+  try {
+    const student = db.prepare("SELECT user_id FROM students WHERE id = ?").get(id);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+    db.transaction(() => {
+      db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, student.user_id);
+      db.prepare("UPDATE students SET student_id = ?, program_id = ?, class_id = ? WHERE id = ?").run(index_number, program_id || null, class_id || null, id);
+    })();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router10.delete("/:id", (req, res) => {
+  const { id } = req.params;
+  try {
+    const student = db.prepare("SELECT user_id FROM students WHERE id = ?").get(id);
+    if (!student) return res.status(404).json({ error: "Student not found" });
+    db.transaction(() => {
+      const evaluations = db.prepare("SELECT id FROM evaluations WHERE student_id = ?").all(id);
+      for (const ev of evaluations) {
+        db.prepare("DELETE FROM evaluation_answers WHERE evaluation_id = ?").run(ev.id);
+      }
+      db.prepare("DELETE FROM evaluations WHERE student_id = ?").run(id);
+      db.prepare("DELETE FROM students WHERE id = ?").run(id);
+      db.prepare("DELETE FROM users WHERE id = ?").run(student.user_id);
+    })();
     res.json({ success: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -538,8 +735,9 @@ router10.post("/bulk", (req, res) => {
   const { students } = req.body;
   try {
     const insertUser = db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)");
-    const insertStudent = db.prepare("INSERT INTO students (user_id, student_id, program_id) VALUES (?, ?, ?)");
+    const insertStudent = db.prepare("INSERT INTO students (user_id, student_id, program_id, class_id) VALUES (?, ?, ?, ?)");
     const getProgram = db.prepare("SELECT id FROM programs WHERE code = ?");
+    const getClass = db.prepare("SELECT id FROM classes WHERE name = ?");
     const transaction = db.transaction((studentsList) => {
       for (const student of studentsList) {
         const password = student.index_number.slice(-6);
@@ -547,8 +745,13 @@ router10.post("/bulk", (req, res) => {
         const email = `${student.index_number}@student.local`;
         const program = getProgram.get(student.program_code);
         const program_id = program ? program.id : null;
+        let class_id = null;
+        if (student.class_name) {
+          const classObj = getClass.get(student.class_name);
+          if (classObj) class_id = classObj.id;
+        }
         const result = insertUser.run(email, hash, "student", student.name);
-        insertStudent.run(result.lastInsertRowid, student.index_number, program_id);
+        insertStudent.run(result.lastInsertRowid, student.index_number, program_id, class_id);
       }
     });
     transaction(students);
@@ -603,29 +806,144 @@ router11.get("/results", (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+router11.delete("/results", (req, res) => {
+  try {
+    db.transaction(() => {
+      db.prepare("DELETE FROM evaluation_answers").run();
+      db.prepare("DELETE FROM evaluations").run();
+    })();
+    res.json({ success: true, message: "All analytics and results have been cleared successfully." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 var analytics_default = router11;
 
-// src/api/index.ts
+// src/api/users.ts
+import { Router as Router12 } from "express";
+import bcrypt5 from "bcryptjs";
+import jwt2 from "jsonwebtoken";
 var router12 = Router12();
-router12.use("/auth", auth_default);
-router12.use("/tutors", tutors_default);
-router12.use("/programs", programs_default);
-router12.use("/classes", classes_default);
-router12.use("/courses", courses_default);
-router12.use("/assignments", assignments_default);
-router12.use("/evaluations", evaluations_default);
-router12.use("/dashboard", dashboard_default);
-router12.use("/questions", questions_default);
-router12.use("/students", students_default);
-router12.use("/analytics", analytics_default);
-var api_default = router12;
+var JWT_SECRET2 = process.env.JWT_SECRET || "super-secret-key-change-me";
+var requireSuperAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "No token provided" });
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt2.verify(token, JWT_SECRET2);
+    if (decoded.role !== "super_admin") {
+      return res.status(403).json({ error: "Access denied. Super Admin only." });
+    }
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "Invalid token" });
+  }
+};
+router12.get("/", requireSuperAdmin, (req, res) => {
+  try {
+    const users = db.prepare("SELECT id, name, email, role, created_at FROM users WHERE role IN ('admin', 'super_admin')").all();
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+router12.post("/", requireSuperAdmin, (req, res) => {
+  const { name, email, password, role } = req.body;
+  if (!["admin", "super_admin"].includes(role)) {
+    return res.status(400).json({ error: "Invalid role for system user" });
+  }
+  try {
+    const hash = bcrypt5.hashSync(password, 10);
+    db.prepare("INSERT INTO users (email, password, role, name) VALUES (?, ?, ?, ?)").run(email, hash, role, name);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router12.put("/:id", requireSuperAdmin, (req, res) => {
+  const { id } = req.params;
+  const { name, email, password, role } = req.body;
+  try {
+    if (password) {
+      const hash = bcrypt5.hashSync(password, 10);
+      db.prepare("UPDATE users SET name = ?, email = ?, password = ?, role = ? WHERE id = ? AND role IN ('admin', 'super_admin')").run(name, email, hash, role, id);
+    } else {
+      db.prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE id = ? AND role IN ('admin', 'super_admin')").run(name, email, role, id);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+router12.delete("/:id", requireSuperAdmin, (req, res) => {
+  const { id } = req.params;
+  try {
+    const superAdmins = db.prepare("SELECT count(*) as count FROM users WHERE role = 'super_admin'").get();
+    const userToDelete = db.prepare("SELECT role FROM users WHERE id = ?").get(id);
+    if (userToDelete && userToDelete.role === "super_admin" && superAdmins.count <= 1) {
+      return res.status(400).json({ error: "Cannot delete the last super admin" });
+    }
+    db.prepare("DELETE FROM users WHERE id = ? AND role IN ('admin', 'super_admin')").run(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+var requireAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: "No token provided" });
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt2.verify(token, JWT_SECRET2);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(401).json({ error: "Invalid token" });
+  }
+};
+router12.put("/profile/:id", requireAuth, (req, res) => {
+  const { id } = req.params;
+  const { name, email, password } = req.body;
+  if (req.user.id !== parseInt(id, 10)) {
+    return res.status(403).json({ error: "You can only update your own profile" });
+  }
+  try {
+    if (password) {
+      const hash = bcrypt5.hashSync(password, 10);
+      db.prepare("UPDATE users SET name = ?, email = ?, password = ? WHERE id = ?").run(name, email, hash, id);
+    } else {
+      db.prepare("UPDATE users SET name = ?, email = ? WHERE id = ?").run(name, email, id);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+var users_default = router12;
+
+// src/api/index.ts
+var router13 = Router13();
+router13.use("/auth", auth_default);
+router13.use("/tutors", tutors_default);
+router13.use("/programs", programs_default);
+router13.use("/classes", classes_default);
+router13.use("/courses", courses_default);
+router13.use("/assignments", assignments_default);
+router13.use("/evaluations", evaluations_default);
+router13.use("/dashboard", dashboard_default);
+router13.use("/questions", questions_default);
+router13.use("/students", students_default);
+router13.use("/analytics", analytics_default);
+router13.use("/users", users_default);
+var api_default = router13;
 
 // server.ts
 var __filename2 = fileURLToPath2(import.meta.url);
 var __dirname2 = path2.dirname(__filename2);
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3e3;
+  const PORT = 3e3;
   app.use(express.json());
   initDb();
   app.use("/api", api_default);
